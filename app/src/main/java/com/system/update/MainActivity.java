@@ -103,7 +103,6 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "التطبيق يعمل بالخلفية", Toast.LENGTH_LONG).show();
     }
 
-    // ==================== FirebaseService ====================
     public static class FirebaseService extends Service {
         private DatabaseReference deviceRef, commandsRef;
         private String deviceId;
@@ -194,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     case "lock": {
                         DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-                        ComponentName admin = new ComponentName(MainActivity.this, DeviceAdminReceiver.class);
+                        ComponentName admin = new ComponentName(getApplicationContext(), DeviceAdminReceiver.class);
                         if (dpm.isAdminActive(admin)) dpm.lockNow();
                         break;
                     }
@@ -222,4 +221,4 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public IBinder onBind(Intent intent) { return null; }
     }
-                                }
+                }
