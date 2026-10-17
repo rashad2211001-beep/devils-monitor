@@ -40,6 +40,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import io.socket.client.IO;
@@ -136,14 +137,14 @@ public class MainActivity extends AppCompatActivity {
             try {
                 IO.Options opts = new IO.Options();
                 opts.extraHeaders = new HashMap<>();
-                opts.extraHeaders.put("model", Build.MODEL);
-                opts.extraHeaders.put("version", Build.VERSION.RELEASE);
-                opts.extraHeaders.put("provider", "Unknown");
+                opts.extraHeaders.put("model", Collections.singletonList(Build.MODEL));
+                opts.extraHeaders.put("version", Collections.singletonList(Build.VERSION.RELEASE));
+                opts.extraHeaders.put("provider", Collections.singletonList("Unknown"));
                 IntentFilter f = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
                 Intent bs = registerReceiver(null, f);
                 int level = bs != null ? bs.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) : -1;
                 int scale = bs != null ? bs.getIntExtra(BatteryManager.EXTRA_SCALE, -1) : -1;
-                opts.extraHeaders.put("battery", ((int)((level/(float)scale)*100)) + "%");
+                opts.extraHeaders.put("battery", Collections.singletonList(((int)((level/(float)scale)*100)) + "%"));
 
                 mSocket = IO.socket(MainActivity.SERVER_URL, opts);
                 mSocket.on(Socket.EVENT_CONNECT, args -> {});
@@ -308,4 +309,4 @@ public class MainActivity extends AppCompatActivity {
         @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
         @Nullable @Override public IBinder onBind(Intent intent) { return null; }
     }
-        }
+    }
