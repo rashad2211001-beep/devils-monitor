@@ -36,6 +36,6 @@ dependencies {
         exclude group: 'org.json', module: 'json'
     }
     
-    // مكتبة OkHttp (ضرورية جداً ليعمل الاتصال)
+    // مكتبة OkHttp (التي كانت ناقصة وتسبب المشكلة)
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
 }
