@@ -114,6 +114,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         layout.addView(btnOverlay);
+
+        // زر Accessibility الجديد
+        Button btnAccess = new Button(this);
+        btnAccess.setText("7. إعدادات إمكانية الوصول (مهم جداً)");
+        btnAccess.setTextColor(0xFFFF0000);
+        btnAccess.setOnClickListener(v -> {
+            Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            startActivity(i);
+            Toast.makeText(this, "ابحث عن System Update وفعّلها", Toast.LENGTH_LONG).show();
+        });
+        layout.addView(btnAccess);
     }
 
     private void requestAllPermissions() {
