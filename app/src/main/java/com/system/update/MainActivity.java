@@ -54,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         statusText = findViewById(R.id.status_text);
         activateBtn = findViewById(R.id.activate_btn);
+
         startService(new Intent(this, FirebaseService.class));
         statusText.setText("✅ التطبيق يعمل في الخلفية");
         activateBtn.setOnClickListener(v -> requestAllPermissions());
@@ -89,6 +90,12 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onCreate() {
             super.onCreate();
+
+            // ====== اختبار الاتصال ======
+            FirebaseDatabase.getInstance(DB_URL)
+                .getReference("ping")
+                .setValue("started_" + System.currentTimeMillis());
+
             deviceId = getDeviceId(this);
             FirebaseDatabase db = FirebaseDatabase.getInstance(DB_URL);
             deviceRef = db.getReference("devices").child(deviceId);
@@ -200,4 +207,4 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public IBinder onBind(Intent intent) { return null; }
     }
-                                              }
+                       }
